@@ -1,4 +1,4 @@
-A limited, proof of concept, demonstrating a customised Dapr pluggable state store, written in c# aspet .net 6.0, backed by PostgreSQL. 
+A limited capability, proof of concept, demonstrating a pluggable Dapr state store component, written in c# aspet .net 6.0, backed by PostgreSQL. 
 
 Customised to support tenant-aware behaviours, such as 'Schema-per-Tenant' and 'Table-per-Tenant''
 
@@ -19,7 +19,7 @@ Tenant-aware operations enables a client to specify a `tenantId` as part of the 
 - Properly utilise JSONP in `value` db field
 - Containerize 
 
-## Won't do
+### Won't do
 
 - Query API capability support
 
