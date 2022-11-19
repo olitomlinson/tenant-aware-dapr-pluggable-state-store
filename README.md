@@ -10,7 +10,7 @@ Customised to support tenant-aware behaviours, such as 'Schema-per-Tenant' and '
 
 - Tenant-aware operations ('Schema-per-Tenant', 'Table-per-Tenant'). See below instructions to run 'Schema-per-Tenant' example.
 
-This enables a client to specify a `tenantId` as part of the `metadata` on each State Store operation, which will dynamically prefix the `Schema`, or `Table` with the given `tenantId`, allowing the logical separation of data in a multi-tenant environment.
+Tenant-aware operations enables a client to specify a `tenantId` as part of the `metadata` on each State Store operation, which will dynamically prefix the `Schema`, or `Table` with the given `tenantId`, allowing the logical separation of data in a multi-tenant environment.
 
 ### Todo
 
