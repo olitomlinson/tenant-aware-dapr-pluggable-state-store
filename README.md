@@ -14,9 +14,14 @@ Tenant-aware operations enables a client to specify a `tenantId` as part of the 
 
 ### Todo
 
-- Etag support (blocked by https://github.com/dapr/dapr/issues/5520)
-- Transactional State Store support
+- Dapr Etag capability support (blocked by https://github.com/dapr/dapr/issues/5520)
+- Transactional capability support
 - Properly utilise JSONP in `value` db field
+- Containerize 
+
+## Won't do
+
+- Query API capability support
 
 ## Run the pluggable component in Dapr stand-alone mode
 
