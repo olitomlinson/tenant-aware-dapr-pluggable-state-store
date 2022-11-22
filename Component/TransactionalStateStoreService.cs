@@ -32,6 +32,8 @@ public class TransactionalStateStoreService : TransactionalStateStore.Transactio
 
     public override async Task<TransactionalStateResponse> Transact(TransactionalStateRequest request, ServerCallContext context)
     {
+        var db = _initHelper.TenantAwareDatabaseHelper?.Invoke(request.Metadata);
+
         foreach(var op in request.Operations)
         {
             switch (op.RequestCase)
@@ -39,12 +41,20 @@ public class TransactionalStateStoreService : TransactionalStateStore.Transactio
                 case TransactionalStateOperation.RequestOneofCase.Set : 
                 {
                     _logger.LogInformation("transact - set");
-                    throw new NotImplementedException();
+                    // TODO : Need to implement 'something' here with regards to 'isBinary',
+                    // but I do not know what this is trying to achieve. See existing pgSQL built-in component 
+                    // https://github.com/dapr/components-contrib/blob/d3662118105a1d8926f0d7b598c8b19cd9dc1ccf/state/postgresql/postgresdbaccess.go#L135
+                    var strValue = op.Set.Value.ToString(System.Text.Encoding.UTF8);
+
+                    await db.UpsertAsync(op.Set.Key, strValue, op.Set.Etag?.Value ?? String.Empty); 
+                    continue;
                 }
                 case TransactionalStateOperation.RequestOneofCase.Delete :
                 {
                     _logger.LogInformation("transact - del");
-                    throw new NotImplementedException();
+                    
+                    await db.DeleteRowAsync(op.Delete.Key);
+                    continue;
                 }
                 case TransactionalStateOperation.RequestOneofCase.None : 
                     throw new Exception("transact - operation Not Set");

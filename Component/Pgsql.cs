@@ -94,6 +94,49 @@ namespace Helpers
             return null;
         }
 
+        public async Task UpsertAsync(string key, string value, string etag)
+        {
+            bool done = false;
+            int attempt = 0;
+            while(!done){
+                /* 
+                why the loop?! - It's just a super naive way to create the schemas and tables if they don't exist
+                */
+                try{
+                    attempt += 1;
+                    if (string.IsNullOrEmpty(etag))
+                        await InsertOrUpdateAsync(key,value, attempt);
+                    else{
+                        throw new NotImplementedException();
+                        /* TODO : Need to implement Etag handling but I can't get my head around the 
+                           c# equivalent of the XID data type
+                           https://github.com/dapr/components-contrib/blob/d3662118105a1d8926f0d7b598c8b19cd9dc1ccf/state/postgresql/postgresdbaccess.go#L158
+
+                           TODO : await databaseHelper.UpdateAsync(item.Key, strValue, item.Etag, attempt);
+                        */
+                    }
+                    done = true;
+                }
+                catch(PostgresException ex) when (ex.TableDoesNotExist() || ex.SchemaDoesNotExist()){
+                    try { 
+                        await CreateSchemaAsync(); 
+                    }
+                    catch(PostgresException ex1) when (ex.AnyErrorExcludingSchemaDoesNotExist()) {
+                        _logger.LogError(ex1, $"SCHEMA CREATE exception : sqlState = {ex1.SqlState}");
+                    }
+    
+                    try { 
+                        await CreateTableAsync(); 
+                    }
+                    catch(PostgresException ex2) when (ex2.AnyErrorExcludingTableDoesNotExist()){
+                        _logger.LogError(ex2, $"TABLE CREATE exception : sqlState = {ex2.SqlState}");
+                    }
+                }
+
+                if (attempt == 3) done = true;
+            }
+        }
+
         public async Task InsertOrUpdateAsync(string key, string value, int attempt){
             var sql = 
                 @$"INSERT INTO {SchemaAndTable} 
@@ -117,6 +160,7 @@ namespace Helpers
 
             await using var dataSource = NpgsqlDataSource.Create(_connectionString);
             await using (var cmd = dataSource.CreateCommand(sql)){
+                
                 cmd.Parameters.AddWithValue("1", NpgsqlTypes.NpgsqlDbType.Text, key);
                 cmd.Parameters.AddWithValue("2", NpgsqlTypes.NpgsqlDbType.Jsonb, value);
                 _logger.LogDebug($"INSERT attempt {attempt}");
@@ -138,5 +182,21 @@ namespace Helpers
 
             _logger.LogDebug($"key deleted : [{key}]");
         }
+    }
+}
+
+
+public static class PostgresExtensions{
+    public static bool TableDoesNotExist(this PostgresException ex){
+        return (ex.SqlState == "42P01");
+    }
+    public static bool AnyErrorExcludingTableDoesNotExist(this PostgresException ex){
+        return !TableDoesNotExist(ex);
+    }
+    public static bool SchemaDoesNotExist(this PostgresException ex){
+        return (ex.SqlState == "42P06");
+    }
+     public static bool AnyErrorExcludingSchemaDoesNotExist(this PostgresException ex){
+        return (!SchemaDoesNotExist(ex));
     }
 }
