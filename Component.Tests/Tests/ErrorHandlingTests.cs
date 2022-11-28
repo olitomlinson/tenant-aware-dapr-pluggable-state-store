@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NSubstitute;
 using Google.Protobuf.Collections;
 using Dapr.Client.Autogen.Grpc.v1;
+using Npgsql;
 
 namespace Tests;
 
@@ -18,7 +19,7 @@ public class ErrorHandlingTests
         var h = new StateStoreInitHelper(Substitute.For<ILogger<StateStoreInitHelper>>(), pgsqlFactory);
         var operationMetadata = new MapField<string,string>();
         
-        h.TenantAwareDatabaseHelper?.Invoke(operationMetadata);
+        h.TenantAwareDatabaseFactory?.Invoke(operationMetadata, null, null, null);
         Assert.Fail();
     }
 
@@ -48,6 +49,6 @@ public class ErrorHandlingTests
         await h.InitAsync(componentMetadata);
 
         var operationMetadata = new MapField<string, string>();
-        h.TenantAwareDatabaseHelper?.Invoke(operationMetadata);
+        h.TenantAwareDatabaseFactory?.Invoke(operationMetadata, null, null, null);
     }
 }

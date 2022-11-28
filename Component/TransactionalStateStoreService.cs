@@ -13,53 +13,72 @@
 
 // Uncomment to import Dapr proto components namespace.
 using Dapr.Proto.Components.V1;
+using Google.Protobuf.Collections;
 using Grpc.Core;
+using Npgsql;
 
 namespace Helpers;
 
 public class TransactionalStateStoreService : TransactionalStateStore.TransactionalStateStoreBase
 {
     private readonly ILogger<TransactionalStateStoreService> _logger;
-    private readonly StateStoreInitHelper _initHelper;
+    private readonly StateStoreInitHelper _stateStoreInitHelper;
 
-    public TransactionalStateStoreService(ILogger<TransactionalStateStoreService> logger, StateStoreInitHelper initHelper)
-    {
-        
+    public TransactionalStateStoreService(ILogger<TransactionalStateStoreService> logger, StateStoreInitHelper stateStoreInitHelper)
+    {    
         _logger = logger;
         _logger.LogInformation("transact-ctor");
-        _initHelper = initHelper;
+        _stateStoreInitHelper = stateStoreInitHelper;
     }
 
     public override async Task<TransactionalStateResponse> Transact(TransactionalStateRequest request, ServerCallContext context)
-    {
-        var db = _initHelper.TenantAwareDatabaseHelper?.Invoke(request.Metadata);
+    {    
+        if (!request.Operations.Any())
+            return new TransactionalStateResponse();
 
-        foreach(var op in request.Operations)
+        (var dbfactory, var conn, var tran) = await _stateStoreInitHelper.GetDbFactory(_logger, true);
+        using (conn)
         {
-            switch (op.RequestCase)
+            try 
             {
-                case TransactionalStateOperation.RequestOneofCase.Set : 
+                foreach(var op in request.Operations)
                 {
-                    _logger.LogInformation("transact - set");
-                    // TODO : Need to implement 'something' here with regards to 'isBinary',
-                    // but I do not know what this is trying to achieve. See existing pgSQL built-in component 
-                    // https://github.com/dapr/components-contrib/blob/d3662118105a1d8926f0d7b598c8b19cd9dc1ccf/state/postgresql/postgresdbaccess.go#L135
-                    var strValue = op.Set.Value.ToString(System.Text.Encoding.UTF8);
+                    switch (op.RequestCase)
+                    {
+                        case TransactionalStateOperation.RequestOneofCase.Set : 
+                        {
+                            _logger.LogInformation("transact - set");
+                            var db = dbfactory(op.Set.Metadata);
+                            
+                            // TODO : Need to implement 'something' here with regards to 'isBinary',
+                            // but I do not know what this is trying to achieve. See existing pgSQL built-in component 
+                            // https://github.com/dapr/components-contrib/blob/d3662118105a1d8926f0d7b598c8b19cd9dc1ccf/state/postgresql/postgresdbaccess.go#L135
+                            var strValue = op.Set.Value.ToString(System.Text.Encoding.UTF8);
 
-                    await db.UpsertAsync(op.Set.Key, strValue, op.Set.Etag?.Value ?? String.Empty); 
-                    continue;
+                            await db.UpsertAsync(op.Set.Key, strValue, op.Set.Etag?.Value ?? String.Empty); 
+                            continue;
+                        }
+                        case TransactionalStateOperation.RequestOneofCase.Delete :
+                        {
+                            _logger.LogInformation("transact - del");
+
+                            var db = dbfactory(op.Delete.Metadata);
+                            await db.DeleteRowAsync(op.Delete.Key);
+                            continue;
+                        }
+                        case TransactionalStateOperation.RequestOneofCase.None : 
+                            throw new Exception("transact - operation Not Set");
+                    }
                 }
-                case TransactionalStateOperation.RequestOneofCase.Delete :
-                {
-                    _logger.LogInformation("transact - del");
-                    
-                    await db.DeleteRowAsync(op.Delete.Key);
-                    continue;
-                }
-                case TransactionalStateOperation.RequestOneofCase.None : 
-                    throw new Exception("transact - operation Not Set");
+                await tran.CommitAsync();
             }
+            catch
+            {
+                await tran.RollbackAsync();
+                throw;
+            } 
         }
+        
         return new TransactionalStateResponse();
     }
 }
