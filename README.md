@@ -4,7 +4,8 @@ Customised to support tenant-aware behaviours, such as 'Schema-per-Tenant' and '
 
 ### Working capabilities
 
-- Standard state store behaviors (CRUD)
+- Standard state store behaviors (BulkSet, Get, Delete)
+- Transactional API
 
 ### Customisations
 
@@ -15,7 +16,6 @@ Tenant-aware operations enables a client to specify a `tenantId` as part of the 
 ### Todo
 
 - Dapr Etag capability support (blocked by https://github.com/dapr/dapr/issues/5520)
-- Transactional capability support
 - Properly utilise JSONP in `value` db field
 - Containerize 
 
