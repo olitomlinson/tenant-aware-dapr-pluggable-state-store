@@ -33,30 +33,29 @@ public class StateStoreService : StateStore.StateStoreBase
 
     public override async Task<SetResponse> Set(SetRequest request, ServerCallContext context)
     {
-        _logger.LogDebug("set");
+        _logger.LogInformation("Set");
         throw new Exception("'Set' is not implemented");
         // TODO 
     }
 
     public override async Task<PingResponse> Ping(PingRequest request, ServerCallContext context)
     {
-        _logger.LogDebug("ping");
+        _logger.LogInformation("Ping");
         // TODO 
         return new PingResponse();
     }
 
     public override async Task<FeaturesResponse> Features(FeaturesRequest request, ServerCallContext context)
     {
-        _logger.LogDebug("features");
+        _logger.LogInformation("Features");
         var response = new FeaturesResponse();
         response.Features.Add("TRANSACTIONAL");
-        // TODO : Support Etags eventually
         return response;
     }
 
     public override async Task<InitResponse> Init(InitRequest request, ServerCallContext context)
     {
-        _logger.LogInformation("init");
+        _logger.LogInformation("Init");
 
         await _stateStoreInitHelper.InitAsync(request.Metadata);
 
@@ -65,7 +64,7 @@ public class StateStoreService : StateStore.StateStoreBase
 
     public override async Task<GetResponse> Get(GetRequest request, ServerCallContext context)
     {
-        _logger.LogInformation("get");
+        _logger.LogInformation("Get");
 
         (var dbfactory, var conn, _) = await _stateStoreInitHelper.GetDbFactory(_logger);
         using (conn)
@@ -93,7 +92,7 @@ public class StateStoreService : StateStore.StateStoreBase
 
     public override async Task<BulkSetResponse> BulkSet(BulkSetRequest request, ServerCallContext context)
     {
-        _logger.LogInformation($"bulkset - {request.Items.Count} items");
+        _logger.LogInformation($"BulkSet - {request.Items.Count} items");
                 
         (var dbfactory, var conn, _) = await _stateStoreInitHelper.GetDbFactory(_logger);
         using (conn)
@@ -129,7 +128,7 @@ public class StateStoreService : StateStore.StateStoreBase
 
     public override async Task<DeleteResponse> Delete(DeleteRequest request, ServerCallContext context)
     {
-        _logger.LogInformation("delete");
+        _logger.LogInformation("Delete");
         
         (var dbfactory, var conn, var tran) = await _stateStoreInitHelper.GetDbFactory(_logger, true);
         using (conn)

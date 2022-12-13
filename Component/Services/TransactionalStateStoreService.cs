@@ -26,7 +26,7 @@ public class TransactionalStateStoreService : TransactionalStateStore.Transactio
     public TransactionalStateStoreService(ILogger<TransactionalStateStoreService> logger, StateStoreInitHelper stateStoreInitHelper)
     {    
         _logger = logger;
-        _logger.LogInformation("transact-ctor");
+        _logger.LogInformation("transaction-ctor");
         _stateStoreInitHelper = stateStoreInitHelper;
     }
 
@@ -46,7 +46,7 @@ public class TransactionalStateStoreService : TransactionalStateStore.Transactio
                     {
                         case TransactionalStateOperation.RequestOneofCase.Set : 
                         {
-                            _logger.LogInformation("transact - set");
+                            _logger.LogInformation("Transaction - Set");
                             var db = dbfactory(op.Set.Metadata);
                             
                             // TODO : Need to implement 'something' here with regards to 'isBinary',
@@ -59,14 +59,14 @@ public class TransactionalStateStoreService : TransactionalStateStore.Transactio
                         }
                         case TransactionalStateOperation.RequestOneofCase.Delete :
                         {
-                            _logger.LogInformation("transact - del");
+                            _logger.LogInformation("Transaction - Delete");
 
                             var db = dbfactory(op.Delete.Metadata);
                             await db.DeleteRowAsync(op.Delete.Key);
                             continue;
                         }
                         case TransactionalStateOperation.RequestOneofCase.None : 
-                            throw new Exception("transact - operation Not Set");
+                            throw new Exception("Transaction - NoOp");
                     }
                 }
                 await tran.CommitAsync();
