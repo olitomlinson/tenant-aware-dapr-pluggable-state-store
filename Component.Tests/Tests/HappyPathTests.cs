@@ -14,7 +14,7 @@ public class HappyPathTests
     public async Task DefaultSchemaAndNameAreAppliedWhenNotUsingTenancy()
     {
         var pgsqlFactory = Substitute.For<IPgsqlFactory>();
-        var h = new StateStoreInitHelper(Substitute.For<ILogger<StateStoreInitHelper>>(), pgsqlFactory);
+        var h = new StateStoreInitHelper(pgsqlFactory);
 
         var componentMetadata = new MetadataRequest();
         componentMetadata.Properties.Add("connectionString", "some-c-string");
@@ -30,7 +30,7 @@ public class HappyPathTests
     public async Task TenantIdIsPrefixedToDefaultSchemaName()
     {
         var pgsqlFactory = Substitute.For<IPgsqlFactory>();
-        var h = new StateStoreInitHelper(Substitute.For<ILogger<StateStoreInitHelper>>(), pgsqlFactory);
+        var h = new StateStoreInitHelper(pgsqlFactory);
 
         var componentMetadata = new MetadataRequest();
         componentMetadata.Properties.Add("connectionString", "some-c-string");
@@ -48,7 +48,7 @@ public class HappyPathTests
     public async Task TenantIdIsPrefixedToCustomSchemaName()
     {
         var pgsqlFactory = Substitute.For<IPgsqlFactory>();
-        var h = new StateStoreInitHelper(Substitute.For<ILogger<StateStoreInitHelper>>(), pgsqlFactory);
+        var h = new StateStoreInitHelper(pgsqlFactory);
 
         var componentMetadata = new MetadataRequest();
         componentMetadata.Properties.Add("connectionString", "some-c-string");
@@ -67,7 +67,7 @@ public class HappyPathTests
     public async Task TenantIdIsPrefixedToDefaultTableName()
     {
         var pgsqlFactory = Substitute.For<IPgsqlFactory>();
-        var h = new StateStoreInitHelper(Substitute.For<ILogger<StateStoreInitHelper>>(), pgsqlFactory);
+        var h = new StateStoreInitHelper(pgsqlFactory);
 
         var componentMetadata = new MetadataRequest();
         componentMetadata.Properties.Add("connectionString", "some-c-string");
@@ -85,7 +85,7 @@ public class HappyPathTests
     public async Task TenantIdIsPrefixedToCustomTableName()
     {
         var pgsqlFactory = Substitute.For<IPgsqlFactory>();
-        var h = new StateStoreInitHelper(Substitute.For<ILogger<StateStoreInitHelper>>(), pgsqlFactory);
+        var h = new StateStoreInitHelper(pgsqlFactory);
 
         var componentMetadata = new MetadataRequest();
         componentMetadata.Properties.Add("connectionString", "some-c-string");

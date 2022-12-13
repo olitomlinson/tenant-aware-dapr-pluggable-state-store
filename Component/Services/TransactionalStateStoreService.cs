@@ -13,11 +13,10 @@
 
 // Uncomment to import Dapr proto components namespace.
 using Dapr.Proto.Components.V1;
-using Google.Protobuf.Collections;
 using Grpc.Core;
-using Npgsql;
+using Helpers;
 
-namespace Helpers;
+namespace DaprComponents.Services;
 
 public class TransactionalStateStoreService : TransactionalStateStore.TransactionalStateStoreBase
 {

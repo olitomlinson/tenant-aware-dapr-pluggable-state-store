@@ -95,9 +95,10 @@ public class StateStoreService : StateStore.StateStoreBase
     {
         _logger.LogInformation($"bulkset - {request.Items.Count} items");
                 
-        (var dbfactory, var conn, var tran) = await _stateStoreInitHelper.GetDbFactory(_logger, true);
+        (var dbfactory, var conn, _) = await _stateStoreInitHelper.GetDbFactory(_logger);
         using (conn)
         {
+            NpgsqlTransaction tran = null;
             try
             {
                 foreach(var item in request.Items)
@@ -109,14 +110,18 @@ public class StateStoreService : StateStore.StateStoreBase
                     // https://github.com/dapr/components-contrib/blob/d3662118105a1d8926f0d7b598c8b19cd9dc1ccf/state/postgresql/postgresdbaccess.go#L135
                     var strValue = item.Value.ToString(System.Text.Encoding.UTF8);      
                     
-                    await dbfactory(item.Metadata).UpsertAsync(item.Key, strValue, item.Etag?.Value ?? String.Empty);            
+                    
+                    
+                    // this only works by accident because of postgres implicit transactions, need to find a way to pass down the new tran to make it explict
+                    tran = await conn.BeginTransactionAsync();
+                    await dbfactory(item.Metadata).UpsertAsync(item.Key, strValue, item.Etag?.Value ?? String.Empty);   
+                    await tran.CommitAsync();         
                 }
             }
             catch
             {
                 await tran.RollbackAsync();
             }
-            await tran.CommitAsync();
         }   
         return new BulkSetResponse();
     }

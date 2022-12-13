@@ -16,7 +16,8 @@ public class ErrorHandlingTests
     public async Task MustCallInitBeforeUsingTheDatabaseHelper()
     {
         var pgsqlFactory = Substitute.For<IPgsqlFactory>();
-        var h = new StateStoreInitHelper(Substitute.For<ILogger<StateStoreInitHelper>>(), pgsqlFactory);
+        var h = new StateStoreInitHelper(pgsqlFactory);
+
         var operationMetadata = new MapField<string,string>();
         
         h.TenantAwareDatabaseFactory?.Invoke(operationMetadata, null, null, null);
@@ -29,7 +30,7 @@ public class ErrorHandlingTests
     public async Task ConnectionStringIsNotSpecified()
     {
         var pgsqlFactory = Substitute.For<IPgsqlFactory>();
-        var h = new StateStoreInitHelper(Substitute.For<ILogger<StateStoreInitHelper>>(), pgsqlFactory);
+        var h = new StateStoreInitHelper(pgsqlFactory);
 
         var componentMetadata = new MetadataRequest();
         await h.InitAsync(componentMetadata);
@@ -41,7 +42,7 @@ public class ErrorHandlingTests
     public async Task RequestFailsWhenNoTenantIdIsSpecified()
     {
         var pgsqlFactory = Substitute.For<IPgsqlFactory>();
-        var h = new StateStoreInitHelper(Substitute.For<ILogger<StateStoreInitHelper>>(), pgsqlFactory);
+        var h = new StateStoreInitHelper(pgsqlFactory);
 
         var componentMetadata = new MetadataRequest();
         componentMetadata.Properties.Add("connectionString", "some-c-string");

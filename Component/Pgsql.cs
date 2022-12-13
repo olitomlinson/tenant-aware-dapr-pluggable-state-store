@@ -202,7 +202,7 @@ namespace Helpers
 
         public async Task DeleteRowAsync(string key)
         {
-            // TODO this is vulenerable to sql-injection as-is, and needs converting to a proc because you can't use parameters in code blocks.
+            // TODO this is vulenerable to sql-injection as-is, need to try converting to a proc because you can't use parameters in code blocks like below.
 
             var sql = @$"
             DO $$
