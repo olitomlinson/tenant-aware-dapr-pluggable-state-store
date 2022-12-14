@@ -20,7 +20,7 @@ public class ErrorHandlingTests
 
         var operationMetadata = new MapField<string,string>();
         
-        h.TenantAwareDatabaseFactory?.Invoke(operationMetadata, null, null, null);
+        h.TenantAwareDatabaseFactory?.Invoke(operationMetadata, null, null);
         Assert.Fail();
     }
 
@@ -50,6 +50,6 @@ public class ErrorHandlingTests
         await h.InitAsync(componentMetadata);
 
         var operationMetadata = new MapField<string, string>();
-        h.TenantAwareDatabaseFactory?.Invoke(operationMetadata, null, null, null);
+        h.TenantAwareDatabaseFactory?.Invoke(operationMetadata, null, null);
     }
 }

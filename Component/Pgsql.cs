@@ -10,9 +10,8 @@ namespace Helpers
         private readonly string _table;
         private ILogger _logger;
         private readonly NpgsqlConnection _connection;
-        private NpgsqlTransaction _transaction;
 
-        public Pgsql(string schema, string table, NpgsqlConnection connection, NpgsqlTransaction transaction, ILogger logger)
+        public Pgsql(string schema, string table, NpgsqlConnection connection, ILogger logger)
         {
             if (string.IsNullOrEmpty(schema))
                 throw new ArgumentException("'schema' is not set");
@@ -27,17 +26,9 @@ namespace Helpers
             _logger = logger;
 
             _connection = connection;
-
-            _transaction = transaction;
         }
 
-        // public async Task<NpgsqlTransaction> BeginTransactionAsync()
-        // {
-        //     _transaction = await _connection.BeginTransactionAsync();
-        //     return _transaction;
-        // }
-
-        public async Task CreateSchemaIfNotExistsAsync()
+        public async Task CreateSchemaIfNotExistsAsync(NpgsqlTransaction transaction = null)
         {
             var sql = 
                 @$"CREATE SCHEMA IF NOT EXISTS {_SafeSchema} 
@@ -45,13 +36,13 @@ namespace Helpers
             
             _logger.LogDebug($"CreateSchemaAsync - {sql}");
             
-            await using (var cmd = new NpgsqlCommand(sql, _connection, _transaction))
+            await using (var cmd = new NpgsqlCommand(sql, _connection, transaction))
             await cmd.ExecuteNonQueryAsync();
 
             _logger.LogDebug($"Schema Created : [{_SafeSchema}]");
         }
         
-        public async Task CreateTableIfNotExistsAsync()
+        public async Task CreateTableIfNotExistsAsync(NpgsqlTransaction transaction = null)
         {
             var sql = 
                 @$"CREATE TABLE IF NOT EXISTS {SchemaAndTable} 
@@ -66,7 +57,7 @@ namespace Helpers
 
             _logger.LogDebug($"CreateTableAsync - {sql}");
 
-            await using (var cmd = new NpgsqlCommand(sql, _connection, _transaction))
+            await using (var cmd = new NpgsqlCommand(sql, _connection, transaction))
             await cmd.ExecuteNonQueryAsync();
 
             _logger.LogDebug($"Table Created : [{SchemaAndTable}]");
@@ -86,7 +77,7 @@ namespace Helpers
             }
         }
 
-        public async Task<string> GetAsync(string key)
+        public async Task<string> GetAsync(string key, NpgsqlTransaction transaction = null)
         {
             string value = "";
             string sql = 
@@ -97,7 +88,7 @@ namespace Helpers
                 WHERE 
                     key = (@key)";
 
-            await using (var cmd = new NpgsqlCommand(sql, _connection, _transaction))
+            await using (var cmd = new NpgsqlCommand(sql, _connection, transaction))
             {
                 cmd.Parameters.AddWithValue("key", key);
                 await using (var reader = await cmd.ExecuteReaderAsync())
@@ -111,7 +102,7 @@ namespace Helpers
             return null;
         }
 
-        public async Task UpsertAsync(string key, string value, string etag)
+        public async Task UpsertAsync(string key, string value, string etag, NpgsqlTransaction transaction = null)
         {
             bool done = false;
             int attempt = 0;
@@ -125,9 +116,9 @@ namespace Helpers
                     attempt += 1;
                     if (string.IsNullOrEmpty(etag))
                     {
-                        await CreateSchemaIfNotExistsAsync(); 
-                        await CreateTableIfNotExistsAsync(); 
-                        await InsertOrUpdateAsync(key,value, attempt);
+                        await CreateSchemaIfNotExistsAsync(transaction); 
+                        await CreateTableIfNotExistsAsync(transaction); 
+                        await InsertOrUpdateAsync(key,value, attempt, transaction);
                     }
                     else
                     {
@@ -145,7 +136,7 @@ namespace Helpers
                 {
                     try 
                     { 
-                        await CreateSchemaIfNotExistsAsync(); 
+                        await CreateSchemaIfNotExistsAsync(transaction); 
                     }
                     catch(PostgresException ex1) when (ex.AnyErrorExcludingSchemaDoesNotExist())
                     {
@@ -155,7 +146,7 @@ namespace Helpers
     
                     try
                     { 
-                        await CreateTableIfNotExistsAsync(); 
+                        await CreateTableIfNotExistsAsync(transaction); 
                     }
                     catch(PostgresException ex2) when (ex2.AnyErrorExcludingTableDoesNotExist())
                     {
@@ -168,7 +159,7 @@ namespace Helpers
             }
         }
 
-        public async Task InsertOrUpdateAsync(string key, string value, int attempt)
+        public async Task InsertOrUpdateAsync(string key, string value, int attempt, NpgsqlTransaction transaction = null)
         {
             var sql = 
                 @$"INSERT INTO {SchemaAndTable} 
@@ -190,7 +181,7 @@ namespace Helpers
 
             _logger.LogDebug($"InsertOrUpdateAsync : key: [{key}], value: [{value}], sql: [{sql}]");
 
-            await using (var cmd = new NpgsqlCommand(sql, _connection, _transaction))
+            await using (var cmd = new NpgsqlCommand(sql, _connection, transaction))
             {
                 cmd.Parameters.AddWithValue("1", NpgsqlTypes.NpgsqlDbType.Text, key);
                 cmd.Parameters.AddWithValue("2", NpgsqlTypes.NpgsqlDbType.Jsonb, value);
@@ -200,7 +191,7 @@ namespace Helpers
             _logger.LogDebug($"Row inserted/updated");
         }
 
-        public async Task DeleteRowAsync(string key)
+        public async Task DeleteRowAsync(string key, NpgsqlTransaction transaction = null)
         {
             // TODO this is vulenerable to sql-injection as-is, need to try converting to a proc because you can't use parameters in code blocks like below.
 
@@ -220,7 +211,7 @@ namespace Helpers
             END
             $$;";
 
-            await using (var cmd = new NpgsqlCommand(sql, _connection, _transaction))
+            await using (var cmd = new NpgsqlCommand(sql, _connection, transaction))
             await cmd.ExecuteNonQueryAsync();
 
             _logger.LogDebug($"key deleted : [{key}]");

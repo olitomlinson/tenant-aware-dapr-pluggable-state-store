@@ -26,18 +26,20 @@ public class TransactionalStateStoreService : TransactionalStateStore.Transactio
     public TransactionalStateStoreService(ILogger<TransactionalStateStoreService> logger, StateStoreInitHelper stateStoreInitHelper)
     {    
         _logger = logger;
-        _logger.LogInformation("transaction-ctor");
         _stateStoreInitHelper = stateStoreInitHelper;
     }
 
     public override async Task<TransactionalStateResponse> Transact(TransactionalStateRequest request, ServerCallContext context)
     {    
+_logger.LogInformation("Transaction - Set/Delete");
+
         if (!request.Operations.Any())
             return new TransactionalStateResponse();
 
-        (var dbfactory, var conn, var tran) = await _stateStoreInitHelper.GetDbFactory(_logger, true);
+        (var dbfactory, var conn) = await _stateStoreInitHelper.GetDbFactory(_logger);
         using (conn)
         {
+            var tran = await conn.BeginTransactionAsync();
             try 
             {
                 foreach(var op in request.Operations)
@@ -46,7 +48,6 @@ public class TransactionalStateStoreService : TransactionalStateStore.Transactio
                     {
                         case TransactionalStateOperation.RequestOneofCase.Set : 
                         {
-                            _logger.LogInformation("Transaction - Set");
                             var db = dbfactory(op.Set.Metadata);
                             
                             // TODO : Need to implement 'something' here with regards to 'isBinary',
@@ -54,15 +55,13 @@ public class TransactionalStateStoreService : TransactionalStateStore.Transactio
                             // https://github.com/dapr/components-contrib/blob/d3662118105a1d8926f0d7b598c8b19cd9dc1ccf/state/postgresql/postgresdbaccess.go#L135
                             var strValue = op.Set.Value.ToString(System.Text.Encoding.UTF8);
 
-                            await db.UpsertAsync(op.Set.Key, strValue, op.Set.Etag?.Value ?? String.Empty); 
+                            await db.UpsertAsync(op.Set.Key, strValue, op.Set.Etag?.Value ?? String.Empty, tran); 
                             continue;
                         }
                         case TransactionalStateOperation.RequestOneofCase.Delete :
                         {
-                            _logger.LogInformation("Transaction - Delete");
-
                             var db = dbfactory(op.Delete.Metadata);
-                            await db.DeleteRowAsync(op.Delete.Key);
+                            await db.DeleteRowAsync(op.Delete.Key, tran);
                             continue;
                         }
                         case TransactionalStateOperation.RequestOneofCase.None : 

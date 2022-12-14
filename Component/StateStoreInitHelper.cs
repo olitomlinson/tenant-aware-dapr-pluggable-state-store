@@ -13,30 +13,26 @@ namespace Helpers
         private const string DEFAULT_TABLE_NAME = "state";
         private const string DEFAULT_SCHEMA_NAME = "public";
         private IPgsqlFactory _pgsqlFactory;
-        public Func<MapField<string, string>, NpgsqlConnection, NpgsqlTransaction,ILogger, Pgsql>? TenantAwareDatabaseFactory { get; private set; }
+        public Func<MapField<string, string>, NpgsqlConnection,ILogger, Pgsql>? TenantAwareDatabaseFactory { get; private set; }
 
         private string _connectionString;
         
         public StateStoreInitHelper(IPgsqlFactory pgsqlFactory){
             _pgsqlFactory = pgsqlFactory;
-            TenantAwareDatabaseFactory = (_,_,_,_) => { throw new InvalidOperationException("Call 'InitAsync' first"); };
+            TenantAwareDatabaseFactory = (_,_,_) => { throw new InvalidOperationException("Call 'InitAsync' first"); };
         }
 
-        public async Task<(Func<MapField<string,string>, Pgsql>, NpgsqlConnection, NpgsqlTransaction)> GetDbFactory(ILogger logger, bool withTransaction = false)
+        public async Task<(Func<MapField<string,string>, Pgsql>, NpgsqlConnection)> GetDbFactory(ILogger logger)
         {
             var connection = new NpgsqlConnection(_connectionString);
             await connection.OpenAsync();
             Func<MapField<string,string>,Pgsql> factory = null;
-            NpgsqlTransaction transaction = null;
-
-            if (withTransaction)
-                transaction = await connection.BeginTransactionAsync();
 
             factory = (metadata) => {
 
-                return TenantAwareDatabaseFactory(metadata, connection, transaction, logger);
+                return TenantAwareDatabaseFactory(metadata, connection, logger);
             };   
-            return (factory, connection, transaction);
+            return (factory, connection);
         }
 
         public async Task InitAsync(MetadataRequest componentMetadata){
@@ -50,7 +46,7 @@ namespace Helpers
             string defaultTable = GetDefaultTableName(componentMetadata.Properties);  
 
             TenantAwareDatabaseFactory = 
-                (operationMetadata, connection, transaction, logger) => {
+                (operationMetadata, connection, logger) => {
                     /* 
                         Why is this a func? 
                         Schema and Table are not known until a state operation is requested, 
@@ -62,7 +58,6 @@ namespace Helpers
                             defaultSchema, 
                             defaultTable, 
                             connection, 
-                            transaction, 
                             logger);
                     
                     var tenantId = GetTenantIdFromMetadata(operationMetadata);
@@ -74,14 +69,12 @@ namespace Helpers
                                 schema:             $"{tenantId}-{defaultSchema}", 
                                 table:              defaultTable, 
                                 connection, 
-                                transaction,
                                 logger); 
                         case TABLE_KEYWORD : 
                             return _pgsqlFactory.Create(
                                 schema:             defaultSchema, 
                                 table:              $"{tenantId}-{defaultTable}",
                                 connection, 
-                                transaction,
                                 logger);
                         default:
                             throw new Exception("Couldn't instanciate the correct tenant-aware Pgsql wrapper");

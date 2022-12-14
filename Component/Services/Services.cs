@@ -27,7 +27,6 @@ public class StateStoreService : StateStore.StateStoreBase
     public StateStoreService(ILogger<StateStoreService> logger, StateStoreInitHelper stateStoreInitHelper)
     {
         _logger = logger;
-        _logger.LogInformation("ctor");
         _stateStoreInitHelper = stateStoreInitHelper;
     }
 
@@ -35,13 +34,11 @@ public class StateStoreService : StateStore.StateStoreBase
     {
         _logger.LogInformation("Set");
         throw new Exception("'Set' is not implemented");
-        // TODO 
     }
 
     public override async Task<PingResponse> Ping(PingRequest request, ServerCallContext context)
     {
         _logger.LogInformation("Ping");
-        // TODO 
         return new PingResponse();
     }
 
@@ -66,7 +63,7 @@ public class StateStoreService : StateStore.StateStoreBase
     {
         _logger.LogInformation("Get");
 
-        (var dbfactory, var conn, _) = await _stateStoreInitHelper.GetDbFactory(_logger);
+        (var dbfactory, var conn) = await _stateStoreInitHelper.GetDbFactory(_logger);
         using (conn)
         {
             string value = "";
@@ -94,7 +91,7 @@ public class StateStoreService : StateStore.StateStoreBase
     {
         _logger.LogInformation($"BulkSet - {request.Items.Count} items");
                 
-        (var dbfactory, var conn, _) = await _stateStoreInitHelper.GetDbFactory(_logger);
+        (var dbfactory, var conn) = await _stateStoreInitHelper.GetDbFactory(_logger);
         using (conn)
         {
             NpgsqlTransaction tran = null;
@@ -109,11 +106,8 @@ public class StateStoreService : StateStore.StateStoreBase
                     // https://github.com/dapr/components-contrib/blob/d3662118105a1d8926f0d7b598c8b19cd9dc1ccf/state/postgresql/postgresdbaccess.go#L135
                     var strValue = item.Value.ToString(System.Text.Encoding.UTF8);      
                     
-                    
-                    
-                    // this only works by accident because of postgres implicit transactions, need to find a way to pass down the new tran to make it explict
                     tran = await conn.BeginTransactionAsync();
-                    await dbfactory(item.Metadata).UpsertAsync(item.Key, strValue, item.Etag?.Value ?? String.Empty);   
+                    await dbfactory(item.Metadata).UpsertAsync(item.Key, strValue, item.Etag?.Value ?? String.Empty, tran);   
                     await tran.CommitAsync();         
                 }
             }
@@ -125,17 +119,62 @@ public class StateStoreService : StateStore.StateStoreBase
         return new BulkSetResponse();
     }
 
+    public override async Task<BulkGetResponse> BulkGet(BulkGetRequest request, ServerCallContext context)
+    {
+        _logger.LogInformation("BulkGet");
+        var response = new BulkGetResponse();
+
+        (var dbfactory, var conn) = await _stateStoreInitHelper.GetDbFactory(_logger);
+        using (conn)
+        {
+            string value = "";
+            bool notFound = false;
+
+            foreach(var item in request.Items)
+            {
+                try 
+                {
+                    value = await dbfactory(item.Metadata).GetAsync(item.Key);
+                    if (value == null)
+                        notFound = true;
+                } 
+                catch(PostgresException ex) when (ex.TableDoesNotExist())
+                {
+                    notFound = true;
+                }
+
+                if (notFound){
+                    // do nothing?
+                    _logger.LogDebug("not found  " + item.Key);
+                    continue;
+                }
+
+                response.Items.Add( 
+                    new BulkStateItem(){
+                        Key = item.Key,
+                        Data = Google.Protobuf.ByteString.CopyFromUtf8(value)
+                    }
+                );
+            }      
+        }
+
+        response.Got = true;
+
+        return response;
+    }
+
 
     public override async Task<DeleteResponse> Delete(DeleteRequest request, ServerCallContext context)
     {
         _logger.LogInformation("Delete");
         
-        (var dbfactory, var conn, var tran) = await _stateStoreInitHelper.GetDbFactory(_logger, true);
+        (var dbfactory, var conn) = await _stateStoreInitHelper.GetDbFactory(_logger);
         using (conn)
         {
+            var tran = await conn.BeginTransactionAsync();
             try 
             {
-                await dbfactory(request.Metadata).DeleteRowAsync(request.Key);
+                await dbfactory(request.Metadata).DeleteRowAsync(request.Key, tran);
             }
             catch
             {
