@@ -48,7 +48,7 @@ namespace Helpers
                 @$"CREATE TABLE IF NOT EXISTS {SchemaAndTable} 
                 ( 
                     key text NOT NULL PRIMARY KEY COLLATE pg_catalog.""default"" 
-                    ,value jsonb
+                    ,value text
                     ,insertdate TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
                     ,updatedate TIMESTAMP WITH TIME ZONE NULL
                 ) 
@@ -104,62 +104,26 @@ namespace Helpers
 
         public async Task UpsertAsync(string key, string value, string etag, NpgsqlTransaction transaction = null)
         {
-            bool done = false;
-            int attempt = 0;
-            while(!done)
-            {
-                /* 
-                why the loop?! - It's just a super naive way to create the schemas and tables if they don't exist
-                */
-                try
-                {
-                    attempt += 1;
-                    if (string.IsNullOrEmpty(etag))
-                    {
-                        await CreateSchemaIfNotExistsAsync(transaction); 
-                        await CreateTableIfNotExistsAsync(transaction); 
-                        await InsertOrUpdateAsync(key,value, attempt, transaction);
-                    }
-                    else
-                    {
-                        throw new NotImplementedException();
-                        /* TODO : Need to implement Etag handling but I can't get my head around the 
-                           c# equivalent of the XID data type
-                           https://github.com/dapr/components-contrib/blob/d3662118105a1d8926f0d7b598c8b19cd9dc1ccf/state/postgresql/postgresdbaccess.go#L158
-
-                           TODO : await databaseHelper.UpdateAsync(item.Key, strValue, item.Etag, attempt);
-                        */
-                    }
-                    done = true;
-                }
-                catch(PostgresException ex) when (ex.TableDoesNotExist() || ex.SchemaDoesNotExist())
-                {
-                    try 
-                    { 
-                        await CreateSchemaIfNotExistsAsync(transaction); 
-                    }
-                    catch(PostgresException ex1) when (ex.AnyErrorExcludingSchemaDoesNotExist())
-                    {
-                        _logger.LogError(ex1, $"SCHEMA CREATE exception : sqlState = {ex1.SqlState}");
-                        throw ex;
-                    }
     
-                    try
-                    { 
-                        await CreateTableIfNotExistsAsync(transaction); 
-                    }
-                    catch(PostgresException ex2) when (ex2.AnyErrorExcludingTableDoesNotExist())
-                    {
-                        _logger.LogError(ex2, $"TABLE CREATE exception : sqlState = {ex2.SqlState}");
-                        throw ex;
-                    }
-                }
+            if (string.IsNullOrEmpty(etag))
+            {
+                await CreateSchemaIfNotExistsAsync(transaction); 
+                await CreateTableIfNotExistsAsync(transaction); 
+                await InsertOrUpdateAsync(key,value, transaction);
+            }
+            else
+            {
+                throw new NotImplementedException();
+                /* TODO : Need to implement Etag handling but I can't get my head around the 
+                    c# equivalent of the XID data type
+                    https://github.com/dapr/components-contrib/blob/d3662118105a1d8926f0d7b598c8b19cd9dc1ccf/state/postgresql/postgresdbaccess.go#L158
 
-                if (attempt == 3) done = true;
+                    I would probably not use the XID with XMIN data-type, and just roll my own UUID Etag instead. Not as efficient, but meh...
+                */
             }
         }
 
-        public async Task InsertOrUpdateAsync(string key, string value, int attempt, NpgsqlTransaction transaction = null)
+        public async Task InsertOrUpdateAsync(string key, string value, NpgsqlTransaction transaction = null)
         {
             var sql = 
                 @$"INSERT INTO {SchemaAndTable} 
@@ -185,7 +149,6 @@ namespace Helpers
             {
                 cmd.Parameters.AddWithValue("1", NpgsqlTypes.NpgsqlDbType.Text, key);
                 cmd.Parameters.AddWithValue("2", NpgsqlTypes.NpgsqlDbType.Jsonb, value);
-                _logger.LogDebug($"INSERT attempt {attempt}");
                 await cmd.ExecuteNonQueryAsync();
             }
             _logger.LogDebug($"Row inserted/updated");
@@ -193,7 +156,8 @@ namespace Helpers
 
         public async Task DeleteRowAsync(string key, NpgsqlTransaction transaction = null)
         {
-            // TODO this is vulenerable to sql-injection as-is, need to try converting to a proc because you can't use parameters in code blocks like below.
+            // TODO this is vulenerable to sql-injection as-is, need to try converting to a proc because
+            // you can't use parameters in code blocks like below.
 
             var sql = @$"
             DO $$
