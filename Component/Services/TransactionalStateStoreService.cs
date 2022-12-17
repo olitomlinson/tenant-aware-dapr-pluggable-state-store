@@ -31,7 +31,7 @@ public class TransactionalStateStoreService : TransactionalStateStore.Transactio
 
     public override async Task<TransactionalStateResponse> Transact(TransactionalStateRequest request, ServerCallContext context)
     {    
-_logger.LogInformation("Transaction - Set/Delete");
+        _logger.LogInformation("Transaction - Set/Delete");
 
         if (!request.Operations.Any())
             return new TransactionalStateResponse();
