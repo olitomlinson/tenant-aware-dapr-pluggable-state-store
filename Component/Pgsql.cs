@@ -32,7 +32,8 @@ namespace Helpers
         {
             var sql = 
                 @$"CREATE SCHEMA IF NOT EXISTS {_SafeSchema} 
-                AUTHORIZATION myusername;";
+                AUTHORIZATION myusername;
+                CREATE EXTENSION IF NOT EXISTS ""uuid-ossp"";";
             
             _logger.LogDebug($"CreateSchemaAsync - {sql}");
             
@@ -49,6 +50,7 @@ namespace Helpers
                 ( 
                     key text NOT NULL PRIMARY KEY COLLATE pg_catalog.""default"" 
                     ,value text
+                    ,etag text
                     ,insertdate TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
                     ,updatedate TIMESTAMP WITH TIME ZONE NULL
                 ) 
@@ -77,16 +79,21 @@ namespace Helpers
             }
         }
 
-        public async Task<string> GetAsync(string key, NpgsqlTransaction transaction = null)
+        public async Task<Tuple<string,string>> GetAsync(string key, NpgsqlTransaction transaction = null)
         {
             string value = "";
+            string etag = "";
             string sql = 
                 @$"SELECT 
                     key
-                    ,value 
+                    ,value
+                    ,etag
+                    
                 FROM {SchemaAndTable} 
                 WHERE 
                     key = (@key)";
+
+            _logger.LogInformation($"GetAsync:  key: [{key}], value: [{value}], sql: [{sql}]");
 
             await using (var cmd = new NpgsqlCommand(sql, _connection, transaction))
             {
@@ -95,70 +102,71 @@ namespace Helpers
                 while (await reader.ReadAsync())
                 {
                     value = reader.GetString(1);
-                    _logger.LogDebug("key: {0}, value: {1}", reader.GetString(0), value);
-                    return value;
+                    etag = reader.GetString(2);
+                    _logger.LogDebug("key: {0}, value: {1}, etag : {2}", reader.GetString(0), value, etag);
+                    return new Tuple<string,string>(value, etag);
                 }
             }
-            return null;
+            return new Tuple<string,string>(null,null);
         }
 
         public async Task UpsertAsync(string key, string value, string etag, NpgsqlTransaction transaction = null)
         {
     
+            // this is an optimisation, which I will probably remove when I eventually support First-Write-Wins.
             if (string.IsNullOrEmpty(etag))
             {
                 await CreateSchemaIfNotExistsAsync(transaction); 
                 await CreateTableIfNotExistsAsync(transaction); 
-                await InsertOrUpdateAsync(key,value, transaction);
             }
-            else
-            {
-                throw new NotImplementedException();
-                /* TODO : Need to implement Etag handling but I can't get my head around the 
-                    c# equivalent of the XID data type
-                    https://github.com/dapr/components-contrib/blob/d3662118105a1d8926f0d7b598c8b19cd9dc1ccf/state/postgresql/postgresdbaccess.go#L158
 
-                    I would probably not use the XID with XMIN data-type, and just roll my own UUID Etag instead. Not as efficient, but meh...
-                */
-            }
+            await InsertOrUpdateAsync(key, value, etag, transaction);
         }
 
-        public async Task InsertOrUpdateAsync(string key, string value, NpgsqlTransaction transaction = null)
+        public async Task InsertOrUpdateAsync(string key, string value, string etag, NpgsqlTransaction transaction = null)
         {
-            var sql = 
-                @$"INSERT INTO {SchemaAndTable} 
-                (
-                    key
-                    ,value
-                ) 
-                VALUES 
-                (
-                    @1 
-                    ,@2
-                )
-                ON CONFLICT (key)
-                DO
-                UPDATE SET 
-                    value = @2
-                    ,updatedate = NOW()
-                ;";
+      
+            var query = @$"INSERT INTO {SchemaAndTable} 
+            (
+                key
+                ,value
+                ,etag
+            ) 
+            VALUES 
+            (
+                @1 
+                ,@2
+                ,uuid_generate_v4()::text
+            )
+            ON CONFLICT (key)
+            DO
+            UPDATE SET 
+                value = @2
+                ,updatedate = NOW()
+                ,etag = uuid_generate_v4()::text
+            WHERE {SchemaAndTable}.etag = @3
+            ;";
+            
 
-            _logger.LogDebug($"InsertOrUpdateAsync : key: [{key}], value: [{value}], sql: [{sql}]");
+            _logger.LogDebug($"InsertOrUpdateAsync : key: [{key}], value: [{value}], sql: [{query}]");
 
-            await using (var cmd = new NpgsqlCommand(sql, _connection, transaction))
+            await using (var cmd = new NpgsqlCommand(query, _connection, transaction))
             {
                 cmd.Parameters.AddWithValue("1", NpgsqlTypes.NpgsqlDbType.Text, key);
                 cmd.Parameters.AddWithValue("2", NpgsqlTypes.NpgsqlDbType.Jsonb, value);
-                await cmd.ExecuteNonQueryAsync();
+                cmd.Parameters.AddWithValue("3", NpgsqlTypes.NpgsqlDbType.Text, etag);
+                var rowsAffected = await cmd.ExecuteNonQueryAsync();
+
+                if (!string.IsNullOrEmpty(etag) && rowsAffected == 0)
+                    throw new Exception("Etag mismatch");
             }
             _logger.LogDebug($"Row inserted/updated");
         }
 
-        public async Task DeleteRowAsync(string key, NpgsqlTransaction transaction = null)
+        public async Task DeleteRowAsync(string key, string etag, NpgsqlTransaction transaction = null)
         {
             // TODO this is vulenerable to sql-injection as-is, need to try converting to a proc because
             // you can't use parameters in code blocks like below.
-
             var sql = @$"
             DO $$
             BEGIN 
@@ -170,15 +178,22 @@ namespace Helpers
                     )
                 THEN
                     DELETE FROM {SchemaAndTable}
-                    WHERE key = '{key}';
+                    WHERE 
+                        key = '{key}'
+                        AND
+                        etag = '{etag}';
                 END IF;
             END
             $$;";
 
-            await using (var cmd = new NpgsqlCommand(sql, _connection, transaction))
-            await cmd.ExecuteNonQueryAsync();
+            _logger.LogDebug($"DeleteRowAsync: key: [{key}], etag: [{etag}], sql: [{sql}]");
 
-            _logger.LogDebug($"key deleted : [{key}]");
+            await using (var cmd = new NpgsqlCommand(sql, _connection, transaction))
+            {
+                var rowsDeleted = await cmd.ExecuteNonQueryAsync();
+                if (rowsDeleted == 0 && !string.IsNullOrEmpty(etag))
+                    throw new Exception("Etag mismatch");
+            }
         }
     }
 }

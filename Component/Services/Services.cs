@@ -47,6 +47,7 @@ public class StateStoreService : StateStore.StateStoreBase
         _logger.LogInformation("Features");
         var response = new FeaturesResponse();
         response.Features.Add("TRANSACTIONAL");
+        response.Features.Add("ETAG");
         return response;
     }
 
@@ -67,11 +68,12 @@ public class StateStoreService : StateStore.StateStoreBase
         using (conn)
         {
             string value = "";
+            string etag = "";
             bool notFound = false;
 
             try 
             {
-                value = await dbfactory(request.Metadata).GetAsync(request.Key);
+                (value, etag) = await dbfactory(request.Metadata).GetAsync(request.Key);
                 if (value == null)
                     notFound = true;
             } 
@@ -81,9 +83,16 @@ public class StateStoreService : StateStore.StateStoreBase
             }
 
             if (notFound)
+            {
+                _logger.LogDebug($"Object not found with key : [{request.Key}]");
                 return new GetResponse();
+            }
 
-            return new GetResponse(){ Data = Google.Protobuf.ByteString.CopyFromUtf8(value)};       
+            return new GetResponse(){ 
+                Data = Google.Protobuf.ByteString.CopyFromUtf8(value),
+                Etag = new Etag() {
+                    Value = etag
+                }};       
         }
     }
 
@@ -105,15 +114,20 @@ public class StateStoreService : StateStore.StateStoreBase
                     // but I do not know what this is trying to achieve. See existing pgSQL built-in component 
                     // https://github.com/dapr/components-contrib/blob/d3662118105a1d8926f0d7b598c8b19cd9dc1ccf/state/postgresql/postgresdbaccess.go#L135
                     var strValue = item.Value.ToString(System.Text.Encoding.UTF8);      
-                    
                     tran = await conn.BeginTransactionAsync();
                     await dbfactory(item.Metadata).UpsertAsync(item.Key, strValue, item.Etag?.Value ?? String.Empty, tran);   
                     await tran.CommitAsync();         
                 }
             }
-            catch
+            catch(Exception ex)
             {
                 await tran.RollbackAsync();
+
+                if (ex.Message == "Etag mismatch")
+                    _logger.LogInformation("Etag mismatch");
+                else
+                    _logger.LogError(ex, "State object could not be inserted/updated");
+                throw ex;
             }
         }   
         return new BulkSetResponse();
@@ -128,13 +142,14 @@ public class StateStoreService : StateStore.StateStoreBase
         using (conn)
         {
             string value = "";
+            string etag = "";
             bool notFound = false;
 
             foreach(var item in request.Items)
             {
                 try 
                 {
-                    value = await dbfactory(item.Metadata).GetAsync(item.Key);
+                    (value, etag) = await dbfactory(item.Metadata).GetAsync(item.Key);
                     if (value == null)
                         notFound = true;
                 } 
@@ -144,15 +159,17 @@ public class StateStoreService : StateStore.StateStoreBase
                 }
 
                 if (notFound){
-                    // do nothing?
-                    _logger.LogDebug("not found  " + item.Key);
+                    _logger.LogDebug($"Object not found with key : [{item.Key}]");
                     continue;
                 }
 
                 response.Items.Add( 
                     new BulkStateItem(){
                         Key = item.Key,
-                        Data = Google.Protobuf.ByteString.CopyFromUtf8(value)
+                        Data = Google.Protobuf.ByteString.CopyFromUtf8(value),
+                        Etag = new Etag() {
+                            Value = etag
+                        }
                     }
                 );
             }      
@@ -174,11 +191,17 @@ public class StateStoreService : StateStore.StateStoreBase
             var tran = await conn.BeginTransactionAsync();
             try 
             {
-                await dbfactory(request.Metadata).DeleteRowAsync(request.Key, tran);
+                await dbfactory(request.Metadata).DeleteRowAsync(request.Key, request.Etag?.Value ?? String.Empty, tran);
             }
-            catch
-            {
+            catch(Exception ex)
+            {   
                 await tran.RollbackAsync();
+
+                if (ex.Message == "Etag mismatch")
+                    _logger.LogInformation("Etag mismatch");
+                else
+                    _logger.LogError(ex, "State object could not be deleted");
+                throw ex;
             }
             await tran.CommitAsync();
         }

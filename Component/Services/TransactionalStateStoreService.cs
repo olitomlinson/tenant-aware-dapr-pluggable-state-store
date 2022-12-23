@@ -61,7 +61,7 @@ public class TransactionalStateStoreService : TransactionalStateStore.Transactio
                         case TransactionalStateOperation.RequestOneofCase.Delete :
                         {
                             var db = dbfactory(op.Delete.Metadata);
-                            await db.DeleteRowAsync(op.Delete.Key, tran);
+                            await db.DeleteRowAsync(op.Delete.Key, op.Set.Etag?.Value ?? String.Empty, tran);
                             continue;
                         }
                         case TransactionalStateOperation.RequestOneofCase.None : 
@@ -70,10 +70,16 @@ public class TransactionalStateStoreService : TransactionalStateStore.Transactio
                 }
                 await tran.CommitAsync();
             }
-            catch
+            catch(Exception ex)
             {
                 await tran.RollbackAsync();
-                throw;
+
+                if (ex.Message == "Etag mismatch")
+                    _logger.LogInformation("Etag mismatch");
+                else
+                    _logger.LogError(ex, "State object could not be deleted");
+                    
+                throw ex;
             } 
         }
         
