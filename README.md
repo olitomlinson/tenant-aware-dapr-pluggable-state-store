@@ -1,3 +1,14 @@
+> **Warning**
+> This repo is obsolete as of 24/02/2023. Please go here [dapr-pluggable-state-store](https://github.com/olitomlinson/dapr-pluggable-state-store) for the latest encarnation 
+
+> **Warning**
+> This repo is obsolete as of 24/02/2023. Please go here [dapr-pluggable-state-store](https://github.com/olitomlinson/dapr-pluggable-state-store) for the latest encarnation 
+
+> **Warning**
+> This repo is obsolete as of 24/02/2023. Please go here [dapr-pluggable-state-store](https://github.com/olitomlinson/dapr-pluggable-state-store) for the latest encarnation 
+
+---
+
 A limited capability, proof of concept, demonstrating a pluggable Dapr state store component, written in c# aspet .net 6.0, backed by PostgreSQL. 
 
 Customised to support tenant-aware behaviours, such as 'Schema-per-Tenant' and 'Table-per-Tenant''
